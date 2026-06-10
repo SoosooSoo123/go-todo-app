@@ -12,6 +12,7 @@ func main() {
 	InitDB()
 	http.HandleFunc("/tasks", handleTasks)
 	fmt.Println("Server is running on http://localhost:8080")
+	http.Handle("/", http.FileServer(http.Dir("./")))
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
@@ -91,3 +92,4 @@ func deleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
