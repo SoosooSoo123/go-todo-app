@@ -1,175 +1,93 @@
 package main
 
 import (
-	"bufio"
-	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
-	"os"
+	"net/http"
 	"strconv"
-	"strings"
-
-	_ "github.com/glebarez/go-sqlite" // درایور دیتابیس SQLite
 )
 
-// متغیر سراسری برای نگه داشتن اتصال دیتابیس
-var db *sql.DB
-
 func main() {
-	var err error
-	// ۱. اتصال به دیتابیس (اگر فایل وجود نداشته باشد، آن را می‌سازد)
-	db, err = sql.Open("sqlite", "todo.db")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
-	// ۲. ساخت جدول وظایف (اگر از قبل ساخته نشده باشد)
-	createTableQuery := `
-	CREATE TABLE IF NOT EXISTS tasks (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		task TEXT NOT NULL,
-		done INTEGER DEFAULT 0
-	);`
-	_, err = db.Exec(createTableQuery)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Println("Welcome to your Go To-Do List (Database Version)!")
-
-	for {
-		fmt.Println("\n--- MENU ---")
-		fmt.Println("1. View Tasks")
-		fmt.Println("2. Add Task")
-		fmt.Println("3. Mark Task as Done")
-		fmt.Println("4. Delete Task")
-		fmt.Println("5. Exit")
-		fmt.Print("Choose an option (1-5): ")
-
-		scanner.Scan()
-		choice := strings.TrimSpace(scanner.Text())
-
-		switch choice {
-		case "1":
-			listTasks()
-		case "2":
-			fmt.Print("Enter task description: ")
-			scanner.Scan()
-			taskText := strings.TrimSpace(scanner.Text())
-			if taskText != "" {
-				addTask(taskText)
-			} else {
-				fmt.Println("Task cannot be empty!")
-			}
-		case "3":
-			listTasks()
-			fmt.Print("Enter the ID of the task to mark as done: ")
-			scanner.Scan()
-			idStr := strings.TrimSpace(scanner.Text())
-			id, err := strconv.Atoi(idStr)
-			if err != nil {
-				fmt.Println("Invalid ID. Please enter a number.")
-				continue
-			}
-			markDone(id)
-		case "4":
-			listTasks()
-			fmt.Print("Enter the ID of the task to delete: ")
-			scanner.Scan()
-			idStr := strings.TrimSpace(scanner.Text())
-			id, err := strconv.Atoi(idStr)
-			if err != nil {
-				fmt.Println("Invalid ID. Please enter a number.")
-				continue
-			}
-			deleteTask(id)
-		case "5":
-			fmt.Println("Goodbye!")
-			return
-		default:
-			fmt.Println("Invalid choice. Please select 1-5.")
-		}
-	}
+	InitDB()
+	http.HandleFunc("/tasks", handleTasks)
+	fmt.Println("Server is running on http://localhost:8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-// افزودن تسک به دیتابیس (INSERT)
-func addTask(taskText string) {
-	query := `INSERT INTO tasks (task, done) VALUES (?, 0)`
-	_, err := db.Exec(query, taskText)
-	if err != nil {
-		fmt.Println("Error adding task:", err)
-		return
-	}
-	fmt.Printf("Added: \"%s\"\n", taskText)
-}
+func handleTasks(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-// نمایش تسک‌ها از دیتابیس (SELECT)
-func listTasks() {
-	query := `SELECT id, task, done FROM tasks`
-	rows, err := db.Query(query)
-	if err != nil {
-		fmt.Println("Error reading tasks:", err)
-		return
-	}
-	defer rows.Close()
-
-	hasTasks := false
-	fmt.Println("\n--- YOUR TASKS ---")
-	for rows.Next() {
-		hasTasks = true
-		var id int
-		var task string
-		var done int
-		err = rows.Scan(&id, &task, &done)
-		if err != nil {
-			fmt.Println("Error scanning row:", err)
-			return
-		}
-
-		status := "[ ]"
-		if done == 1 {
-			status = "[✓]"
-		}
-		fmt.Printf("%d. %s %s\n", id, status, task)
-	}
-
-	if !hasTasks {
-		fmt.Println("Your to-do list is empty!")
-	}
-}
-
-// بروزرسانی وضعیت تسک در دیتابیس (UPDATE)
-func markDone(id int) {
-	query := `UPDATE tasks SET done = 1 WHERE id = ?`
-	result, err := db.Exec(query, id)
-	if err != nil {
-		fmt.Println("Error updating task:", err)
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		fmt.Printf("Task with ID %d not found.\n", id)
-	} else {
-		fmt.Printf("Task %d marked as done!\n", id)
+	switch r.Method {
+	case "GET":
+		getTasks(w, r)
+	case "POST":
+		createTask(w, r)
+	case "PUT":
+		updateTask(w, r)
+	case "DELETE":
+		deleteTask(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-// حذف تسک از دیتابیس (DELETE)
-func deleteTask(id int) {
-	query := `DELETE FROM tasks WHERE id = ?`
-	result, err := db.Exec(query, id)
-	if err != nil {
-		fmt.Println("Error deleting task:", err)
+func getTasks(w http.ResponseWriter, r *http.Request) {
+	var todos []Todo
+	if result := DB.Find(&todos); result.Error != nil {
+		http.Error(w, result.Error.Error(), http.StatusInternalServerError)
 		return
 	}
+	json.NewEncoder(w).Encode(todos)
+}
 
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		fmt.Printf("Task with ID %d not found.\n", id)
-	} else {
-		fmt.Printf("Task %d deleted successfully.\n", id)
+func createTask(w http.ResponseWriter, r *http.Request) {
+	var todo Todo
+	if err := json.NewDecoder(r.Body).Decode(&todo); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
+	if result := DB.Create(&todo); result.Error != nil {
+		http.Error(w, result.Error.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(todo)
+}
+
+func updateTask(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	if err != nil {
+		http.Error(w, "id نامعتبر", http.StatusBadRequest)
+		return
+	}
+	var todo Todo
+	if result := DB.First(&todo, id); result.Error != nil {
+		http.Error(w, "تسک پیدا نشد", http.StatusNotFound)
+		return
+	}
+	todo.Completed = !todo.Completed
+	DB.Save(&todo)
+	json.NewEncoder(w).Encode(todo)
+}
+
+func deleteTask(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	if err != nil {
+		http.Error(w, "id نامعتبر", http.StatusBadRequest)
+		return
+	}
+	if result := DB.Delete(&Todo{}, id); result.Error != nil {
+		http.Error(w, result.Error.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

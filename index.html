@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>تستر API تسک‌ها (شبیه Swagger)</title>
+    <style>
+        body { font-family: Tahoma, Arial; margin: 30px; background-color: #f4f6f9; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #2c3e50; }
+        .section { border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 6px; }
+        .get { border-left: 5px solid #61afff; background-color: #f1f7ff; }
+        .post { border-left: 5px solid #49cc90; background-color: #f0fbf5; }
+        .put { border-left: 5px solid #fca130; background-color: #fffaf0; }
+        .delete { border-left: 5px solid #f93e3e; background-color: #fff5f5; }
+        button { padding: 8px 15px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; }
+        input { padding: 8px; width: 250px; border: 1px solid #ccc; border-radius: 4px; }
+        pre { background: #272822; color: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto; text-align: left; direction: ltr; }
+        .badge { display: inline-block; padding: 4px 8px; color: white; border-radius: 4px; font-size: 12px; font-weight: bold; margin-left: 10px; }
+        .bg-get { background: #61afff; }
+        .bg-post { background: #49cc90; }
+        .bg-put { background: #fca130; }
+        .bg-delete { background: #f93e3e; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>تستر و Swagger پروژه To-Do</h1>
+    <p style="text-align: center;">ابتدا مطمئن شوید سرور Go روی پورت 8080 در حال اجرا است.</p>
+
+    <!-- GET Section -->
+    <div class="section get">
+        <h3><span class="badge bg-get">GET</span> دریافت همه تسک‌ها</h3>
+        <p>آدرس: <code>http://localhost:8080/tasks</code></p>
+        <button onclick="getTasks()" style="background: #61afff; color: white;">ارسال درخواست GET</button>
+    </div>
+
+    <!-- POST Section -->
+    <div class="section post">
+        <h3><span class="badge bg-post">POST</span> ایجاد تسک جدید</h3>
+        <p>آدرس: <code>http://localhost:8080/tasks</code></p>
+        <input type="text" id="taskTitle" placeholder="عنوان تسک جدید را وارد کنید...">
+        <button onclick="createTask()" style="background: #49cc90; color: white;">ارسال درخواست POST</button>
+    </div>
+
+    <!-- PUT Section -->
+    <div class="section put">
+        <h3><span class="badge bg-put">PUT</span> تغییر وضعیت تسک (انجام شد / نشد)</h3>
+        <p>آدرس: <code>http://localhost:8080/tasks?id={ID}</code></p>
+        <input type="number" id="updateId" placeholder="ID تسک را وارد کنید...">
+        <button onclick="updateTask()" style="background: #fca130; color: white;">ارسال درخواست PUT</button>
+    </div>
+
+    <!-- DELETE Section -->
+    <div class="section delete">
+        <h3><span class="badge bg-delete">DELETE</span> حذف تسک</h3>
+        <p>آدرس: <code>http://localhost:8080/tasks?id={ID}</code></p>
+        <input type="number" id="deleteId" placeholder="ID تسک را وارد کنید...">
+        <button onclick="deleteTask()" style="background: #f93e3e; color: white;">ارسال درخواست DELETE</button>
+    </div>
+
+    <h3>پاسخ سرور (Response):</h3>
+    <pre id="response">هنوز درخواستی ارسال نشده است...</pre>
+</div>
+
+<script>
+    const API_URL = "http://localhost:8080/tasks";
+
+    async function showResponse(res) {
+        const pre = document.getElementById("response");
+        try {
+            const data = await res.json();
+            pre.textContent = JSON.stringify(data, null, 4);
+        } catch(e) {
+            pre.textContent = `وضعیت پاسخ: ${res.status} ${res.statusText}`;
+        }
+    }
+
+    // ۱. درخواست GET
+    async function getTasks() {
+        const res = await fetch(API_URL);
+        showResponse(res);
+    }
+
+    // ۲. درخواست POST
+    async function createTask() {
+        const title = document.getElementById("taskTitle").value;
+        if (!title) return alert("لطفا عنوان را وارد کنید");
+        
+        const res = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: title })
+        });
+        showResponse(res);
+        document.getElementById("taskTitle").value = "";
+    }
+
+    // ۳. درخواست PUT
+    async function updateTask() {
+        const id = document.getElementById("updateId").value;
+        if (!id) return alert("لطفا ID را وارد کنید");
+
+        const res = await fetch(`${API_URL}?id=${id}`, {
+            method: "PUT"
+        });
+        showResponse(res);
+        document.getElementById("updateId").value = "";
+    }
+
+    // ۴. درخواست DELETE
+    async function deleteTask() {
+        const id = document.getElementById("deleteId").value;
+        if (!id) return alert("لطفا ID را وارد کنید");
+
+        const res = await fetch(`${API_URL}?id=${id}`, {
+            method: "DELETE"
+        });
+        showResponse(res);
+        document.getElementById("deleteId").value = "";
+    }
+</script>
+
+</body>
+</html>
